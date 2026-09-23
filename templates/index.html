@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AI Comment Guardian</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #111; color: #eee; max-width: 900px; margin: 40px auto; padding: 20px; }
+        h1 { font-size: 42px; }
+        input { width: 100%; padding: 12px; border-radius: 8px; border: none; margin-bottom: 15px; font-size: 16px; box-sizing: border-box; }
+        button { padding: 12px 20px; background: #4f46e5; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; }
+        button:hover { background: #4338ca; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab-btn { padding: 10px 18px; background: #1f1f1f; color: white; border: 1px solid #444; border-radius: 8px; cursor: pointer; }
+        .active-btn { background: #4f46e5; }
+        .tab-content { display: none; }
+        .active-tab { display: block; }
+        .cards { display: flex; gap: 15px; margin-top: 25px; flex-wrap: wrap; }
+        .card { background: #1d1d1d; padding: 15px; border-radius: 10px; flex: 1; text-align: center; min-width: 140px; }
+        .comment { background: #1d1d1d; padding: 12px; border-radius: 8px; margin: 12px 0; }
+        .tag { display: inline-block; padding: 4px 8px; border-radius: 6px; font-size: 12px; margin-right: 5px; }
+        .toxic { background: #7f1d1d; }
+        .bot { background: #78350f; }
+        .rewrite { background: #064e3b; padding: 8px; border-radius: 6px; margin-top: 8px; }
+        .caption-box { background: #222; padding: 15px; border-radius: 10px; margin-top: 20px; }
+        #loading { display: none; color: #bbb; margin-top: 20px; }
+        #error { color: #ff6b6b; margin-top: 15px; font-weight: bold; }
+        #results { display: none; margin-top: 30px; }
+        a { color: #8ab4ff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+<h1>🛡️ AI Comment Guardian</h1>
+<a href="/dashboard">📊 View Analytics Dashboard →</a>
+
+<div class="tabs" style="margin-top: 15px;">
+    <button id="youtubeBtn" class="tab-btn active-btn" onclick="switchTab('youtube', this)">YouTube</button>
+    <button id="instagramBtn" class="tab-btn" onclick="switchTab('instagram', this)">Instagram</button>
+    <button id="screenBtn" class="tab-btn" onclick="switchTab('screenshot', this)">Screenshot Upload</button>
+</div>
+
+<div id="youtube-tab" class="tab-content active-tab">
+    <input id="youtube-url" placeholder="Paste YouTube URL">
+    <button onclick="runAnalysis('youtube')">Analyze YouTube Comments</button>
+</div>
+
+<div id="instagram-tab" class="tab-content">
+    <input id="instagram-url" placeholder="Paste Instagram Public Post URL">
+    <button onclick="runAnalysis('instagram')">Analyze Instagram Comments</button>
+</div>
+
+<div id="screenshot-tab" class="tab-content">
+    <input type="file" id="screenshot-file" accept="image/*">
+    <button onclick="runAnalysis('screenshot')">Analyze Screenshot</button>
+</div>
+
+<div id="loading">⏳ Fetching comments and analyzing AI models... Please wait.</div>
+<div id="error"></div>
+
+<div id="results">
+    <div class="cards">
+        <div class="card"><h2 id="total">0</h2><p>Total Comments</p></div>
+        <div class="card"><h2 id="toxicPct">0%</h2><p>Toxic</p></div>
+        <div class="card"><h2 id="botPct">0%</h2><p>Bot/Spam</p></div>
+        <div class="card"><h2 id="negPct">0%</h2><p>Negative</p></div>
+    </div>
+
+    <div id="captionBox"></div>
+
+    <h2>🔴 Top Abusive Comments</h2>
+    <div id="abusiveList"></div>
+
+    <h2>🤖 Bot / Spam Comments</h2>
+    <div id="botList"></div>
+</div>
+
+<script>
+function switchTab(tab, button) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active-tab'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active-btn'));
+    document.getElementById(tab + '-tab').classList.add('active-tab');
+    button.classList.add('active-btn');
+}
+
+async function runAnalysis(type) {
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('results').style.display = 'none';
+    document.getElementById('error').innerText = '';
+
+    try {
+        let response;
+
+        if (type === 'youtube') {
+            const url = document.getElementById('youtube-url').value.trim();
+            response = await fetch('/analyze-video', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: url })
+            });
+        }
+
+        if (type === 'instagram') {
+            const url = document.getElementById('instagram-url').value.trim();
+            response = await fetch('/analyze-instagram', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: url })
+            });
+        }
+
+        if (type === 'screenshot') {
+            const file = document.getElementById('screenshot-file').files[0];
+            const form = new FormData();
+            form.append('screenshot', file);
+            response = await fetch('/analyze-screenshot', {
+                method: 'POST',
+                body: form
+            });
+        }
+
+        const data = await response.json();
+        document.getElementById('loading').style.display = 'none';
+
+        if (!response.ok) {
+            document.getElementById('error').innerText = data.error || 'Something went wrong.';
+            return;
+        }
+
+        document.getElementById('results').style.display = 'block';
+        document.getElementById('total').innerText = data.total_comments;
+        document.getElementById('toxicPct').innerText = data.toxic_percent + '%';
+        document.getElementById('botPct').innerText = data.bot_percent + '%';
+        document.getElementById('negPct').innerText = data.negative_percent + '%';
+
+        const caption = document.getElementById('captionBox');
+        caption.innerHTML = '';
+
+        if (data.caption_analysis) {
+            caption.innerHTML = `
+            <div class="caption-box">
+                <h3>📝 Caption Analysis</h3>
+                <p>${data.caption_analysis.text}</p>
+                <p>Credibility : <b>${data.caption_analysis.credibility_label}</b> (${data.caption_analysis.credibility_score}%)</p>
+                <p>Writing Style : <b>${data.caption_analysis.ai_written_label}</b> (${data.caption_analysis.ai_written_score}%)</p>
+            </div>`;
+        }
+
+        const abusive = document.getElementById('abusiveList');
+        abusive.innerHTML = '';
+
+        (data.top_abusive || []).forEach(c => {
+            abusive.innerHTML += `
+            <div class="comment">
+                <span class="tag toxic">${c.toxicity_score}% Toxic</span>
+                <b>${c.author}</b>
+                <p>${c.text}</p>
+                <small>${c.sentiment} • ${c.emotion} • 👍 ${c.likes}</small>
+                ${c.rewritten ? `<div class="rewrite">💬 ${c.rewritten}</div>` : ''}
+            </div>`;
+        });
+
+        const bots = document.getElementById('botList');
+        bots.innerHTML = '';
+
+        (data.top_bots || []).forEach(c => {
+            bots.innerHTML += `
+            <div class="comment">
+                <span class="tag bot">Bot / Spam</span>
+                <b>${c.author}</b>
+                <p>${c.text}</p>
+                <small>${c.bot_reasons.join(', ')}</small>
+            </div>`;
+        });
+
+    } catch (err) {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('error').innerText = 'Error : ' + err.message;
+    }
+}
+</script>
+
+</body>
+</html>

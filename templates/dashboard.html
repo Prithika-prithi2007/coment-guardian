@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard - AI Comment Guardian</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background: #111; color: #eee; max-width: 1000px; margin: 40px auto; padding: 20px; }
+        .cards { display: flex; gap: 15px; flex-wrap: wrap; }
+        .card { background: #1d1d1d; padding: 20px; border-radius: 10px; text-align: center; flex: 1; min-width: 180px; }
+        table { width: 100%; margin-top: 20px; border-collapse: collapse; }
+        td, th { border-bottom: 1px solid #333; padding: 10px; text-align: left; }
+        canvas { background: #1d1d1d; border-radius: 10px; padding: 15px; }
+        .charts { display: flex; gap: 25px; flex-wrap: wrap; margin-top: 30px; }
+        .box { flex: 1; min-width: 300px; }
+        a { color: #8ab4ff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+<h1>📊 AI Comment Guardian Dashboard</h1>
+<a href="/">← Back to Main App</a>
+
+<div class="cards" style="margin-top:20px;">
+    <div class="card"><h2 id="total">0</h2>Total Comments</div>
+    <div class="card"><h2 id="toxic">0%</h2>Toxic</div>
+    <div class="card"><h2 id="bot">0%</h2>Bot / Spam</div>
+</div>
+
+<div class="charts">
+    <div class="box">
+        <h3 style="text-align:center;">Sentiment Overview</h3>
+        <canvas id="sentimentChart"></canvas>
+    </div>
+    <div class="box">
+        <h3 style="text-align:center;">Platform Sources</h3>
+        <canvas id="sourceChart"></canvas>
+    </div>
+</div>
+
+<h2>🔴 Highest Toxic Comments</h2>
+<table>
+    <thead>
+        <tr><th>Author</th><th>Comment</th><th>Toxicity</th><th>Time</th></tr>
+    </thead>
+    <tbody id="highRiskTable"></tbody>
+</table>
+
+<h2>👤 Lowest Reputation Users</h2>
+<table>
+    <thead>
+        <tr><th>Author</th><th>Reputation</th><th>Comments</th></tr>
+    </thead>
+    <tbody id="repTable"></tbody>
+</table>
+
+<script>
+async function loadDashboard() {
+    try {
+        const res = await fetch('/dashboard-data');
+        const data = await res.json();
+
+        document.getElementById('total').innerText = data.total_comments;
+        document.getElementById('toxic').innerText = data.toxic_percent + '%';
+        document.getElementById('bot').innerText = data.bot_percent + '%';
+
+        // Sentiment Bar Chart (Green = Positive, Gray = Neutral, Red = Negative)
+        new Chart(document.getElementById('sentimentChart'), {
+            type: 'bar',
+            data: {
+                labels: ['Positive', 'Neutral', 'Negative'],
+                datasets: [{
+                    label: 'Comment Count',
+                    data: [
+                        data.sentiment_distribution.Positive || 0,
+                        data.sentiment_distribution.Neutral || 0,
+                        data.sentiment_distribution.Negative || 0
+                    ],
+                    backgroundColor: ['#16a34a', '#6b7280', '#dc2626']
+                }]
+            },
+            options: {
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { ticks: { color: '#eee' } },
+                    y: { ticks: { color: '#eee' } }
+                }
+            }
+        });
+
+        // Source Doughnut Chart
+        new Chart(document.getElementById('sourceChart'), {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys(data.source_distribution || {}),
+                datasets: [{
+                    data: Object.values(data.source_distribution || {}),
+                    backgroundColor: ['#4f46e5', '#16a34a', '#dc2626']
+                }]
+            },
+            options: {
+                plugins: { legend: { labels: { color: '#eee' } } }
+            }
+        });
+
+        const high = document.getElementById('highRiskTable');
+        high.innerHTML = '';
+        (data.high_risk_comments || []).forEach(c => {
+            high.innerHTML += `<tr>
+                <td>${c.author}</td>
+                <td>${c.text}</td>
+                <td><span style="color:#dc2626; font-weight:bold;">${c.toxicity}%</span></td>
+                <td>${c.timestamp.split('T')[0]}</td>
+            </tr>`;
+        });
+
+        const rep = document.getElementById('repTable');
+        rep.innerHTML = '';
+        (data.reputation || []).forEach(r => {
+            rep.innerHTML += `<tr>
+                <td>${r.author}</td>
+                <td>${r.reputation_score} / 100</td>
+                <td>${r.comment_count}</td>
+            </tr>`;
+        });
+    } catch (err) {
+        console.error("Error loading dashboard data:", err);
+    }
+}
+
+loadDashboard();
+</script>
+
+</body>
+</html>
