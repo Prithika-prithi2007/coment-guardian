@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, render_template
 from transformers import pipeline
 from langdetect import detect
 from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
+from deep_translator import GoogleTranslator
 import instaloader
 import pytesseract
 from PIL import Image
@@ -14,21 +14,21 @@ from datetime import datetime
 
 YOUTUBE_API_KEY = "AIzaSyCdKhoGPuEzuXGNxGTEu9D6i-TSIK6vrVE"
 
-# --- Windows only: uncomment and set your install path ---
-# pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-
 app = Flask(__name__)
 
-print("Loading AI models... this happens once when the server starts.")
+print("Loading AI models... this happens once when the server starts. This will take a few minutes.")
 toxicity_model = pipeline("text-classification", model="unitary/toxic-bert")
 sentiment_model = pipeline("sentiment-analysis", model="cardiffnlp/twitter-roberta-base-sentiment-latest")
 emotion_model = pipeline("text-classification", model="j-hartmann/emotion-english-distilroberta-base")
-rewriter_model = pipeline("text-generation", model="google/flan-t5-base")
 credibility_model = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
+image_detector = pipeline("image-classification", model="Organika/sdxl-detector")
+
 print("All models loaded. Server ready.")
 
 youtube = build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
 insta_loader = instaloader.Instaloader()
+
+SUPPORTED_INDIAN_LANGS = {"ta", "hi", "te", "ml", "kn"}
 
 
 # ---------- Database ----------
@@ -52,6 +52,16 @@ def init_db():
     conn.close()
 
 init_db()
+
+
+# ---------- Translation ----------
+def translate_to_english(text, lang_code):
+    if lang_code not in SUPPORTED_INDIAN_LANGS:
+        return None
+    try:
+        return GoogleTranslator(source="auto", target="en").translate(text)
+    except Exception:
+        return None
 
 
 # ---------- Bot / spam heuristics ----------
@@ -89,71 +99,28 @@ def analyze_comments_list(comments, source):
         if not text.strip():
             continue
 
-        toxic = toxicity_model(text[:512])[0]
-        sentiment = sentiment_model(text[:512])[0]
-        emotion = emotion_model(text[:512])[0]
-        bot_reasons = is_bot_or_spam(text, text_counter)
-
         try:
             lang = detect(text)
         except Exception:
             lang = "unknown"
 
-        raw_score = toxic["score"] * 100
-        comment_lower = text.lower()
+        translated = translate_to_english(text, lang)
+        text_for_ai = translated if translated else text
 
-        abusive_words = [
+        # Limit comment length so the models don't choke on very long comments
+        clean_text = text_for_ai[:250]
 
-    # General insults
-    "idiot","stupid","dumb","moron","loser","fool","clown","trash","garbage",
-    "pathetic","useless","worthless","disgusting","creep","psycho","lunatic",
+        toxic = toxicity_model(clean_text, truncation=True, max_length=256)[0]
+        sentiment = sentiment_model(clean_text, truncation=True, max_length=256)[0]
+        emotion = emotion_model(clean_text, truncation=True, max_length=256)[0]
+        bot_reasons = is_bot_or_spam(text, text_counter)
 
-    # Profanity
-    "fuck","fucking","shit","bullshit","crap","damn","bastard","asshole",
-    "motherfucker","mf","wtf","fck","fk","bs",
-
-    # Gender-based abuse
-    "bitch","slut","whore","hoe","gold digger","pick me","attention seeker",
-
-    # Appearance shaming
-    "ugly","fat","skinny","pig","dog","monkey","buffalo","cow","donkey",
-
-    # Threats / violence
-    "kill","die","go die","hang yourself","burn in hell","murder","destroy you",
-    "i will kill you","shoot you","beat you","slap you",
-
-    # Harassment
-    "shut up","nobody likes you","you deserve it","get lost","get out","drop dead",
-    "you are nothing","hate you","i hate you","worthless person",
-
-    # Racist / hate expressions
-    "racist","terrorist","nazi","slave","blackie","white trash",
-
-    # Homophobic / discriminatory
-    "gay loser","faggot","lesbo","tranny",
-
-    # Common internet abuse
-    "lmao idiot","cry baby","noob","retard","simp","incel","pick me girl",
-    "attention whore","keyboard warrior","punda","pundai","thevdiya","thevidiya","otha","otha dei","sunni",
-    "mayiru","kena","kirukku","loosu","naaye","dei naaye","eruma","pei",
-    "panni","mokka","thayoli","soothu","koothi","loosu payale","manda",
-
-    # Hinglish
-    "chutiya","madarchod","bhenchod","behenchod","bc","mc","harami",
-    "kutta","kamine","kamina","saala","saale","randi","gandu","lund",
-    "jhatu","bakchod","bhosdike","maa ki","behen ki"
-]
-
-        contains_abuse = any(word in comment_lower for word in abusive_words)
-
-        if contains_abuse:
-            toxicity_score = round(raw_score, 2)
-        else:
-            toxicity_score = min(round(raw_score * 0.25, 2), 25)
+        toxicity_score = round(toxic["score"] * 100, 2)
 
         results.append({
             "author": c["author"],
             "text": text,
+            "translated_text": translated,
             "likes": c.get("likes", 0),
             "language": lang,
             "toxicity_label": toxic["label"],
@@ -182,10 +149,18 @@ def analyze_comments_list(comments, source):
 
     for r in top_abusive[:3]:
         if r["toxicity_label"].lower() == "toxic" and r["toxicity_score"] > 40:
-            prompt = f"Rewrite this comment to be polite and respectful: {r['text']}"
-            r["rewritten"] = rewriter_model(prompt, max_length=60)[0]["generated_text"]
+            r["rewritten"] = "Consider rephrasing this more respectfully — for example, focus on disagreeing with the idea rather than the person."
         else:
             r["rewritten"] = None
+
+    bot_clusters = []
+    seen_texts = set()
+    for c in comments:
+        t = c["text"].strip().lower()
+        if text_counter[t] >= 3 and t not in seen_texts:
+            seen_texts.add(t)
+            authors = list(set(cc["author"] for cc in comments if cc["text"].strip().lower() == t))
+            bot_clusters.append({"text": c["text"], "count": text_counter[t], "authors": authors[:10]})
 
     return {
         "total_comments": total,
@@ -193,11 +168,36 @@ def analyze_comments_list(comments, source):
         "bot_percent": round((bot_count / total) * 100, 2) if total else 0,
         "negative_percent": round((negative_count / total) * 100, 2) if total else 0,
         "top_abusive": top_abusive,
-        "top_bots": top_bots
+        "top_bots": top_bots,
+        "bot_clusters": bot_clusters[:5]
     }
 
 
-# ---------- Caption analysis ----------
+def compute_trust_score(result):
+    toxic_pct = result.get("toxic_percent", 0)
+    bot_pct = result.get("bot_percent", 0)
+    neg_pct = result.get("negative_percent", 0)
+
+    penalty = (toxic_pct * 0.45) + (bot_pct * 0.30) + (neg_pct * 0.15)
+
+    caption = result.get("caption_analysis")
+    if caption and caption["credibility_label"] == "misinformation":
+        penalty += caption["credibility_score"] * 0.10
+
+    score = round(max(0, min(100, 100 - penalty)), 2)
+
+    if score >= 70:
+        badge = "Healthy"
+    elif score >= 40:
+        badge = "Moderate Risk"
+    else:
+        badge = "High Risk"
+
+    result["trust_score"] = score
+    result["trust_badge"] = badge
+    return result
+
+
 def analyze_caption(caption):
     if not caption or not caption.strip():
         return None
@@ -232,32 +232,24 @@ def analyze_video():
 
     try:
         video_response = youtube.videos().list(part="snippet", id=video_id).execute()
-        if not video_response.get("items"):
-            return jsonify({"error": "Video not found or is private."}), 404
-
-        description = video_response["items"][0]["snippet"]["description"]
+        description = video_response["items"][0]["snippet"]["description"] if video_response["items"] else ""
 
         comment_response = youtube.commentThreads().list(
             part="snippet", videoId=video_id, maxResults=100, textFormat="plainText", order="relevance"
         ).execute()
-
         comments = []
         for item in comment_response.get("items", []):
             s = item["snippet"]["topLevelComment"]["snippet"]
             comments.append({"author": s["authorDisplayName"], "text": s["textDisplay"], "likes": s["likeCount"]})
-
-    except HttpError as e:
-        if "commentsDisabled" in str(e):
-            return jsonify({"error": "Comments are disabled for this YouTube video."}), 400
-        return jsonify({"error": f"YouTube API error: {e.reason}"}), 400
     except Exception as e:
         return jsonify({"error": f"Could not fetch data: {str(e)}"}), 400
 
     if not comments:
-        return jsonify({"error": "No comments found on this video."}), 400
+        return jsonify({"error": "No comments found (or comments are disabled)."}), 400
 
     result = analyze_comments_list(comments, source="youtube")
     result["caption_analysis"] = analyze_caption(description)
+    result = compute_trust_score(result)
     return jsonify(result)
 
 
@@ -283,13 +275,14 @@ def analyze_instagram():
             comments.append({"author": comment.owner.username, "text": comment.text, "likes": getattr(comment, "likes_count", 0) or 0})
         caption = post.caption or ""
     except Exception as e:
-        return jsonify({"error": f"Could not fetch this post. ({str(e)})"}), 400
+        return jsonify({"error": f"Could not fetch this post. It may be private, or Instagram is rate-limiting requests. ({str(e)})"}), 400
 
     if not comments:
         return jsonify({"error": "No comments found on this post."}), 400
 
     result = analyze_comments_list(comments, source="instagram")
     result["caption_analysis"] = analyze_caption(caption)
+    result = compute_trust_score(result)
     return jsonify(result)
 
 
@@ -305,12 +298,37 @@ def analyze_screenshot():
     lines = [line.strip() for line in raw_text.split("\n") if len(line.strip()) > 8]
 
     if not lines:
-        return jsonify({"error": "Could not detect readable comment text."}), 400
+        return jsonify({"error": "Could not detect readable comment text. Try a clearer screenshot."}), 400
 
     comments = [{"author": "unknown (from screenshot)", "text": line, "likes": 0} for line in lines]
     result = analyze_comments_list(comments, source="screenshot")
     result["caption_analysis"] = None
+    result = compute_trust_score(result)
     return jsonify(result)
+
+
+# ---------- AI / Deepfake Image Detector ----------
+@app.route("/analyze-image", methods=["POST"])
+def analyze_image():
+    if "image" not in request.files:
+        return jsonify({"error": "No image uploaded."}), 400
+
+    file = request.files["image"]
+    try:
+        image = Image.open(io.BytesIO(file.read())).convert("RGB")
+    except Exception:
+        return jsonify({"error": "Could not read this image file."}), 400
+
+    predictions = image_detector(image)
+    predictions = [{"label": p["label"], "score": round(p["score"] * 100, 2)} for p in predictions]
+    predictions.sort(key=lambda p: p["score"], reverse=True)
+
+    return jsonify({
+        "predictions": predictions,
+        "top_label": predictions[0]["label"],
+        "top_score": predictions[0]["score"],
+        "note": "This is a probability estimate based on visual patterns in the image, not a certainty. AI-detection tools can be wrong, especially on heavily compressed or edited images."
+    })
 
 
 # ---------- Dashboard ----------
@@ -328,14 +346,14 @@ def dashboard_data():
     c.execute("SELECT COUNT(*) FROM comments WHERE is_bot = 1")
     bot_count = c.fetchone()[0] or 0
 
-    c.execute("SELECT sentiment, COUNT(*) FROM comments GROUP BY sentiment")
-    sentiment_counts = dict(c.fetchall())
-
     c.execute("SELECT emotion, COUNT(*) FROM comments GROUP BY emotion")
-    emotion_counts = dict(c.fetchall())
+    emotion_counts = c.fetchall()
+
+    c.execute("SELECT sentiment, COUNT(*) FROM comments GROUP BY sentiment")
+    sentiment_counts = c.fetchall()
 
     c.execute("SELECT source, COUNT(*) FROM comments GROUP BY source")
-    source_counts = dict(c.fetchall())
+    source_counts = c.fetchall()
 
     c.execute("SELECT author, text, toxicity, timestamp FROM comments ORDER BY toxicity DESC LIMIT 10")
     high_risk = c.fetchall()
@@ -349,13 +367,9 @@ def dashboard_data():
         "total_comments": total,
         "toxic_percent": round((toxic_count / total) * 100, 2) if total else 0,
         "bot_percent": round((bot_count / total) * 100, 2) if total else 0,
-        "sentiment_distribution": {
-            "Positive": sentiment_counts.get("positive", 0) + sentiment_counts.get("POSITIVE", 0),
-            "Neutral": sentiment_counts.get("neutral", 0) + sentiment_counts.get("NEUTRAL", 0),
-            "Negative": sentiment_counts.get("negative", 0) + sentiment_counts.get("NEGATIVE", 0)
-        },
-        "emotion_distribution": emotion_counts,
-        "source_distribution": source_counts,
+        "emotion_distribution": {row[0]: row[1] for row in emotion_counts},
+        "sentiment_distribution": {row[0].capitalize(): row[1] for row in sentiment_counts},
+        "source_distribution": {row[0]: row[1] for row in source_counts},
         "high_risk_comments": [{"author": r[0], "text": r[1], "toxicity": r[2], "timestamp": r[3]} for r in high_risk],
         "reputation": [{"author": r[0], "reputation_score": round(max(0, 100 - r[1]), 2), "comment_count": r[2]} for r in reputation_rows]
     })

@@ -1,182 +1,261 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>AI Comment Guardian</title>
-    <style>
-        body { font-family: Arial, sans-serif; background: #111; color: #eee; max-width: 900px; margin: 40px auto; padding: 20px; }
-        h1 { font-size: 42px; }
-        input { width: 100%; padding: 12px; border-radius: 8px; border: none; margin-bottom: 15px; font-size: 16px; box-sizing: border-box; }
-        button { padding: 12px 20px; background: #4f46e5; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; }
-        button:hover { background: #4338ca; }
-        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
-        .tab-btn { padding: 10px 18px; background: #1f1f1f; color: white; border: 1px solid #444; border-radius: 8px; cursor: pointer; }
-        .active-btn { background: #4f46e5; }
-        .tab-content { display: none; }
-        .active-tab { display: block; }
-        .cards { display: flex; gap: 15px; margin-top: 25px; flex-wrap: wrap; }
-        .card { background: #1d1d1d; padding: 15px; border-radius: 10px; flex: 1; text-align: center; min-width: 140px; }
-        .comment { background: #1d1d1d; padding: 12px; border-radius: 8px; margin: 12px 0; }
-        .tag { display: inline-block; padding: 4px 8px; border-radius: 6px; font-size: 12px; margin-right: 5px; }
-        .toxic { background: #7f1d1d; }
-        .bot { background: #78350f; }
-        .rewrite { background: #064e3b; padding: 8px; border-radius: 6px; margin-top: 8px; }
-        .caption-box { background: #222; padding: 15px; border-radius: 10px; margin-top: 20px; }
-        #loading { display: none; color: #bbb; margin-top: 20px; }
-        #error { color: #ff6b6b; margin-top: 15px; font-weight: bold; }
-        #results { display: none; margin-top: 30px; }
-        a { color: #8ab4ff; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Comment Guardian</title>
+
+  <style>
+    *{ margin:0; padding:0; box-sizing:border-box; font-family:Arial, Helvetica, sans-serif; }
+    body{ background:#0b1120; color:white; padding:30px; max-width:1100px; margin:auto; }
+    h1{ font-size:40px; margin-bottom:15px; text-align:center; }
+    a{ color:#60a5fa; }
+    .tabs{ display:flex; flex-wrap:wrap; gap:12px; margin:25px 0; }
+    .tab-btn{ background:#1e293b; color:white; border:none; padding:12px 18px; border-radius:10px; cursor:pointer; font-size:15px; }
+    .tab-btn.active{ background:#4f46e5; }
+    .tab-content{ display:none; margin-top:10px; }
+    .tab-content.active{ display:block; }
+    input[type=text],input[type=file]{ width:100%; padding:14px; border-radius:10px; border:none; margin-top:12px; margin-bottom:12px; font-size:15px; }
+    button.action{ background:#4f46e5; color:white; border:none; padding:14px 22px; border-radius:10px; cursor:pointer; font-size:16px; }
+    button.action:hover{ background:#4338ca; }
+    #loading{ display:none; margin-top:20px; color:#93c5fd; }
+    #error{ color:#ef4444; margin-top:15px; font-weight:bold; white-space:pre-wrap; }
+    #results{ display:none; margin-top:30px; }
+    .cards{ display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:15px; margin-bottom:25px; }
+    .card{ background:#111827; padding:18px; border-radius:15px; text-align:center; }
+    .card h2{ color:#60a5fa; margin-bottom:8px; }
+    .caption-box,.comment{ background:#111827; padding:15px; border-radius:12px; margin-bottom:12px; }
+    .translated{ color:#93c5fd; font-size:13px; margin-top:5px; }
+    .meta{ color:#9ca3af; font-size:13px; margin-top:5px; }
+    .tag{ padding:3px 8px; border-radius:5px; font-size:12px; margin-right:5px; display:inline-block; }
+    .toxic{ background:#991b1b; }
+    .bot{ background:#92400e; }
+    .rewritten{ margin-top:8px; padding:10px; background:#065f46; border-radius:8px; color:#d1fae5; }
+    #trustCard{ text-align:center; background:#111827; padding:20px; border-radius:15px; margin-bottom:20px; }
+    #trustScore{ font-size:42px; color:#34d399; margin-top:10px; }
+    #trustBadge{ display:inline-block; padding:5px 14px; border-radius:20px; margin-top:10px; font-size:13px; }
+    #imagePreview{ width:250px; border-radius:10px; display:none; margin-bottom:15px; }
+    .note{ color:#9ca3af; font-size:13px; margin-top:10px; }
+  </style>
 </head>
+
 <body>
 
 <h1>🛡️ AI Comment Guardian</h1>
-<a href="/dashboard">📊 View Analytics Dashboard →</a>
 
-<div class="tabs" style="margin-top: 15px;">
-    <button id="youtubeBtn" class="tab-btn active-btn" onclick="switchTab('youtube', this)">YouTube</button>
-    <button id="instagramBtn" class="tab-btn" onclick="switchTab('instagram', this)">Instagram</button>
-    <button id="screenBtn" class="tab-btn" onclick="switchTab('screenshot', this)">Screenshot Upload</button>
+<p style="text-align:center;margin-bottom:20px;">
+  <a href="/dashboard">📊 View Analytics Dashboard →</a>
+</p>
+
+<div class="tabs">
+  <button class="tab-btn active" data-tab="youtube">YouTube</button>
+  <button class="tab-btn" data-tab="instagram">Instagram</button>
+  <button class="tab-btn" data-tab="screenshot">Screenshot Upload</button>
+  <button class="tab-btn" data-tab="image">AI Image Detector</button>
 </div>
 
-<div id="youtube-tab" class="tab-content active-tab">
-    <input id="youtube-url" placeholder="Paste YouTube URL">
-    <button onclick="runAnalysis('youtube')">Analyze YouTube Comments</button>
+<div class="tab-content active" id="youtube-tab">
+  <input id="youtube-url" type="text" placeholder="Paste YouTube URL">
+  <button class="action" onclick="runAnalysis('youtube')">Analyze YouTube Comments</button>
 </div>
 
-<div id="instagram-tab" class="tab-content">
-    <input id="instagram-url" placeholder="Paste Instagram Public Post URL">
-    <button onclick="runAnalysis('instagram')">Analyze Instagram Comments</button>
+<div class="tab-content" id="instagram-tab">
+  <input id="instagram-url" type="text" placeholder="Paste Instagram Post URL">
+  <button class="action" onclick="runAnalysis('instagram')">Analyze Instagram Comments</button>
+  <p class="note">Only public Instagram posts are supported.</p>
 </div>
 
-<div id="screenshot-tab" class="tab-content">
-    <input type="file" id="screenshot-file" accept="image/*">
-    <button onclick="runAnalysis('screenshot')">Analyze Screenshot</button>
+<div class="tab-content" id="screenshot-tab">
+  <input id="screenshot-file" type="file" accept="image/*">
+  <button class="action" onclick="runAnalysis('screenshot')">Analyze Screenshot</button>
+  <p class="note">Upload screenshots from Instagram, WhatsApp, YouTube, Facebook, or X.</p>
 </div>
 
-<div id="loading">⏳ Fetching comments and analyzing AI models... Please wait.</div>
+<div class="tab-content" id="image-tab">
+  <input id="image-file" type="file" accept="image/*" onchange="previewImage()">
+  <img id="imagePreview">
+  <button class="action" onclick="runAnalysis('image')">Detect AI Generated Image</button>
+  <div id="imageResult" style="margin-top:20px;"></div>
+</div>
+
+<div id="loading">⏳ AI is analyzing...</div>
 <div id="error"></div>
 
 <div id="results">
-    <div class="cards">
-        <div class="card"><h2 id="total">0</h2><p>Total Comments</p></div>
-        <div class="card"><h2 id="toxicPct">0%</h2><p>Toxic</p></div>
-        <div class="card"><h2 id="botPct">0%</h2><p>Bot/Spam</p></div>
-        <div class="card"><h2 id="negPct">0%</h2><p>Negative</p></div>
-    </div>
 
-    <div id="captionBox"></div>
+  <div id="trustCard">
+    <div style="color:#9ca3af;">Community Health Score</div>
+    <div id="trustScore">-</div>
+    <div id="trustBadge">-</div>
+  </div>
 
-    <h2>🔴 Top Abusive Comments</h2>
-    <div id="abusiveList"></div>
+  <div class="cards">
+    <div class="card"><h2 id="total">0</h2><p>Total Comments</p></div>
+    <div class="card"><h2 id="toxicPct">0%</h2><p>Toxic</p></div>
+    <div class="card"><h2 id="botPct">0%</h2><p>Bot / Spam</p></div>
+    <div class="card"><h2 id="negPct">0%</h2><p>Negative</p></div>
+  </div>
 
-    <h2>🤖 Bot / Spam Comments</h2>
-    <div id="botList"></div>
+  <div id="captionBox"></div>
+
+  <h2>🔴 Top Abusive Comments</h2>
+  <div id="abusiveList"></div>
+
+  <h2>🤖 Bot / Spam Comments</h2>
+  <div id="botList"></div>
+
+  <h2>🕸 Suspicious Bot Clusters</h2>
+  <div id="clusterList"></div>
+
 </div>
 
 <script>
-function switchTab(tab, button) {
-    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active-tab'));
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active-btn'));
-    document.getElementById(tab + '-tab').classList.add('active-tab');
-    button.classList.add('active-btn');
+const buttons=document.querySelectorAll(".tab-btn");
+
+buttons.forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    buttons.forEach(b=>b.classList.remove("active"));
+    document.querySelectorAll(".tab-content").forEach(tab=>tab.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById(btn.dataset.tab+"-tab").classList.add("active");
+    document.getElementById("results").style.display="none";
+    document.getElementById("error").innerText="";
+    document.getElementById("imageResult").innerHTML="";
+  });
+});
+
+function previewImage(){
+  const file=document.getElementById("image-file").files[0];
+  const preview=document.getElementById("imagePreview");
+  if(file){
+    preview.src=URL.createObjectURL(file);
+    preview.style.display="block";
+  }
 }
 
-async function runAnalysis(type) {
-    document.getElementById('loading').style.display = 'block';
-    document.getElementById('results').style.display = 'none';
-    document.getElementById('error').innerText = '';
+async function runAnalysis(type){
+  document.getElementById("loading").style.display="block";
+  document.getElementById("error").innerText="";
+  document.getElementById("results").style.display="none";
 
-    try {
-        let response;
+  try{
+    let response;
 
-        if (type === 'youtube') {
-            const url = document.getElementById('youtube-url').value.trim();
-            response = await fetch('/analyze-video', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: url })
-            });
-        }
-
-        if (type === 'instagram') {
-            const url = document.getElementById('instagram-url').value.trim();
-            response = await fetch('/analyze-instagram', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: url })
-            });
-        }
-
-        if (type === 'screenshot') {
-            const file = document.getElementById('screenshot-file').files[0];
-            const form = new FormData();
-            form.append('screenshot', file);
-            response = await fetch('/analyze-screenshot', {
-                method: 'POST',
-                body: form
-            });
-        }
-
-        const data = await response.json();
-        document.getElementById('loading').style.display = 'none';
-
-        if (!response.ok) {
-            document.getElementById('error').innerText = data.error || 'Something went wrong.';
-            return;
-        }
-
-        document.getElementById('results').style.display = 'block';
-        document.getElementById('total').innerText = data.total_comments;
-        document.getElementById('toxicPct').innerText = data.toxic_percent + '%';
-        document.getElementById('botPct').innerText = data.bot_percent + '%';
-        document.getElementById('negPct').innerText = data.negative_percent + '%';
-
-        const caption = document.getElementById('captionBox');
-        caption.innerHTML = '';
-
-        if (data.caption_analysis) {
-            caption.innerHTML = `
-            <div class="caption-box">
-                <h3>📝 Caption Analysis</h3>
-                <p>${data.caption_analysis.text}</p>
-                <p>Credibility : <b>${data.caption_analysis.credibility_label}</b> (${data.caption_analysis.credibility_score}%)</p>
-                <p>Writing Style : <b>${data.caption_analysis.ai_written_label}</b> (${data.caption_analysis.ai_written_score}%)</p>
-            </div>`;
-        }
-
-        const abusive = document.getElementById('abusiveList');
-        abusive.innerHTML = '';
-
-        (data.top_abusive || []).forEach(c => {
-            abusive.innerHTML += `
-            <div class="comment">
-                <span class="tag toxic">${c.toxicity_score}% Toxic</span>
-                <b>${c.author}</b>
-                <p>${c.text}</p>
-                <small>${c.sentiment} • ${c.emotion} • 👍 ${c.likes}</small>
-                ${c.rewritten ? `<div class="rewrite">💬 ${c.rewritten}</div>` : ''}
-            </div>`;
-        });
-
-        const bots = document.getElementById('botList');
-        bots.innerHTML = '';
-
-        (data.top_bots || []).forEach(c => {
-            bots.innerHTML += `
-            <div class="comment">
-                <span class="tag bot">Bot / Spam</span>
-                <b>${c.author}</b>
-                <p>${c.text}</p>
-                <small>${c.bot_reasons.join(', ')}</small>
-            </div>`;
-        });
-
-    } catch (err) {
-        document.getElementById('loading').style.display = 'none';
-        document.getElementById('error').innerText = 'Error : ' + err.message;
+    if(type==="youtube" || type==="instagram"){
+      const url=document.getElementById(type+"-url").value;
+      const endpoint=(type==="youtube") ? "/analyze-video" : "/analyze-instagram";
+      response=await fetch(endpoint,{
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({url})
+      });
+    }else if(type==="screenshot"){
+      const file=document.getElementById("screenshot-file").files[0];
+      if(!file){ throw new Error("Please upload a screenshot."); }
+      const formData=new FormData();
+      formData.append("screenshot",file);
+      response=await fetch("/analyze-screenshot",{ method:"POST", body:formData });
+    }else if(type==="image"){
+      const file=document.getElementById("image-file").files[0];
+      if(!file){ throw new Error("Please upload an image."); }
+      const formData=new FormData();
+      formData.append("image",file);
+      response=await fetch("/analyze-image",{ method:"POST", body:formData });
     }
+
+    const text=await response.text();
+    if(!response.ok){ throw new Error(text); }
+    const data=JSON.parse(text);
+
+    document.getElementById("loading").style.display="none";
+
+    if(type==="image"){
+      document.getElementById("imageResult").innerHTML=`
+      <div class="caption-box">
+        <h3>${data.top_label}</h3>
+        <h2>${data.top_score}%</h2>
+        <p>${data.note}</p>
+      </div>`;
+      return;
+    }
+
+    document.getElementById("results").style.display="block";
+    document.getElementById("total").innerText=data.total_comments;
+    document.getElementById("toxicPct").innerText=data.toxic_percent+"%";
+    document.getElementById("botPct").innerText=data.bot_percent+"%";
+    document.getElementById("negPct").innerText=data.negative_percent+"%";
+    document.getElementById("trustScore").innerText=data.trust_score;
+
+    const badge=document.getElementById("trustBadge");
+    badge.innerText=data.trust_badge;
+    badge.style.background={
+      "Healthy":"#065f46",
+      "Moderate Risk":"#92400e",
+      "High Risk":"#991b1b"
+    }[data.trust_badge] || "#374151";
+
+    const captionBox=document.getElementById("captionBox");
+    captionBox.innerHTML="";
+    if(data.caption_analysis){
+      captionBox.innerHTML=`
+      <div class="caption-box">
+        <h3>Caption Analysis</h3>
+        <p>${data.caption_analysis.text.slice(0,250)}</p>
+        <br>
+        <p><b>Credibility:</b> ${data.caption_analysis.credibility_label} (${data.caption_analysis.credibility_score}%)</p>
+        <p><b>Writing Style:</b> ${data.caption_analysis.ai_written_label} (${data.caption_analysis.ai_written_score}%)</p>
+      </div>`;
+    }
+
+    const abusive=document.getElementById("abusiveList");
+    abusive.innerHTML="";
+    data.top_abusive.forEach(c=>{
+      abusive.innerHTML+=`
+      <div class="comment">
+        <span class="tag toxic">${c.toxicity_score}% Toxic</span>
+        <b>${c.author}</b>
+        <p>${c.text}</p>
+        ${c.translated_text ? `<div class="translated">${c.translated_text}</div>` : ""}
+        <div class="meta">${c.sentiment} • ${c.emotion}</div>
+        ${c.rewritten ? `<div class="rewritten">${c.rewritten}</div>` : ""}
+      </div>`;
+    });
+
+    const bots=document.getElementById("botList");
+    bots.innerHTML="";
+    if(data.top_bots.length===0){
+      bots.innerHTML="<p>No spam comments detected.</p>";
+    }else{
+      data.top_bots.forEach(c=>{
+        bots.innerHTML+=`
+        <div class="comment">
+          <span class="tag bot">Bot</span>
+          <b>${c.author}</b>
+          <p>${c.text}</p>
+          <div class="meta">${c.bot_reasons.join(", ")}</div>
+        </div>`;
+      });
+    }
+
+    const clusters=document.getElementById("clusterList");
+    clusters.innerHTML="";
+    if(data.bot_clusters && data.bot_clusters.length){
+      data.bot_clusters.forEach(cluster=>{
+        clusters.innerHTML+=`
+        <div class="comment">
+          <span class="tag bot">${cluster.count} duplicate comments</span>
+          <p>${cluster.text}</p>
+          <div class="meta">${cluster.authors.join(", ")}</div>
+        </div>`;
+      });
+    }else{
+      clusters.innerHTML="<p>No coordinated spam detected.</p>";
+    }
+
+  }catch(err){
+    document.getElementById("loading").style.display="none";
+    document.getElementById("error").innerText=err.message;
+  }
 }
 </script>
 

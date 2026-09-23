@@ -41,17 +41,13 @@
 
 <h2>🔴 Highest Toxic Comments</h2>
 <table>
-    <thead>
-        <tr><th>Author</th><th>Comment</th><th>Toxicity</th><th>Time</th></tr>
-    </thead>
+    <thead><tr><th>Author</th><th>Comment</th><th>Toxicity</th><th>Time</th></tr></thead>
     <tbody id="highRiskTable"></tbody>
 </table>
 
 <h2>👤 Lowest Reputation Users</h2>
 <table>
-    <thead>
-        <tr><th>Author</th><th>Reputation</th><th>Comments</th></tr>
-    </thead>
+    <thead><tr><th>Author</th><th>Reputation</th><th>Comments</th></tr></thead>
     <tbody id="repTable"></tbody>
 </table>
 
@@ -65,7 +61,6 @@ async function loadDashboard() {
         document.getElementById('toxic').innerText = data.toxic_percent + '%';
         document.getElementById('bot').innerText = data.bot_percent + '%';
 
-        // Sentiment Bar Chart (Green = Positive, Gray = Neutral, Red = Negative)
         new Chart(document.getElementById('sentimentChart'), {
             type: 'bar',
             data: {
@@ -82,14 +77,10 @@ async function loadDashboard() {
             },
             options: {
                 plugins: { legend: { display: false } },
-                scales: {
-                    x: { ticks: { color: '#eee' } },
-                    y: { ticks: { color: '#eee' } }
-                }
+                scales: { x: { ticks: { color: '#eee' } }, y: { ticks: { color: '#eee' } } }
             }
         });
 
-        // Source Doughnut Chart
         new Chart(document.getElementById('sourceChart'), {
             type: 'doughnut',
             data: {
@@ -99,9 +90,7 @@ async function loadDashboard() {
                     backgroundColor: ['#4f46e5', '#16a34a', '#dc2626']
                 }]
             },
-            options: {
-                plugins: { legend: { labels: { color: '#eee' } } }
-            }
+            options: { plugins: { legend: { labels: { color: '#eee' } } } }
         });
 
         const high = document.getElementById('highRiskTable');
